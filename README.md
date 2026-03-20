@@ -2,7 +2,7 @@
 
 A live wildfire risk monitoring dashboard built with real satellite and weather data. Search any location in the world to see current fire danger conditions, active fire detections, air quality, and a 7-day forecast.
 
-**[View Live Site](https://kaiscolieri.github.io/firewatch-dashboard/)** ← replace with your URL
+**[View Live Site](https://kaiscolieri.github.io/firewatch-dashboard/)**
 
 -----
 
