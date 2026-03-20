@@ -1,4 +1,4 @@
-# 🔥 FireWatch — Wildfire Risk Dashboard
+# 🔥 FireWatch: Wildfire Risk Dashboard
 
 A live wildfire risk monitoring dashboard built with real satellite and weather data. Search any location in the world to see current fire danger conditions, active fire detections, air quality, and a 7-day forecast.
 
@@ -63,7 +63,7 @@ The fire risk score (0–100) is calculated using a simplified Fire Weather Inde
 
 ## Getting Started
 
-Just open `index.html` in any browser — no installation or setup required.
+Just open `index.html` in any browser; no installation or setup required.
 
 To run locally:
 
