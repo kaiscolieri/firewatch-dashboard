@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FireWatch — Wildfire Risk Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #181818;
+      --border: #2a2a2a;
+      --text: #f0ece4;
+      --muted: #666;
+      --accent: #ff4d00;
+      --accent2: #ffaa00;
+      --low: #22c55e;
+      --moderate: #eab308;
+      --high: #f97316;
+      --very-high: #ef4444;
+      --extreme: #dc2626;
+    }
+
+```
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background fire texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(255,77,0,0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 80%, rgba(255,170,0,0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10,10,10,0.95);
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-icon {
+  font-size: 1.6rem;
+  animation: flicker 3s infinite alternate;
+}
+
+@keyframes flicker {
+  0%   { opacity: 1; }
+  85%  { opacity: 1; }
+  88%  { opacity: 0.7; }
+  91%  { opacity: 1; }
+  94%  { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.logo-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.8rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.logo-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: -2px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.timestamp {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* Search bar */
+.search-bar {
+  position: relative;
+  z-index: 10;
+  padding: 1.5rem 2rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.search-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.search-input {
+  flex: 1;
+  max-width: 400px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  padding: 0.6rem 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--muted); }
+
+.search-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  padding: 0.65rem 1.5rem;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.search-btn:hover { background: #e64400; }
+.search-btn:active { transform: scale(0.97); }
+
+.preset-btns {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Main layout */
+.main {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: calc(100vh - 130px);
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); }
+
+.panel {
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+}
+
+.panel-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+/* Risk meter */
+.risk-display {
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+.risk-level-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 3.5rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  transition: color 0.6s;
+}
+
+.risk-bar-wrap {
+  margin: 1rem 0 0.5rem;
+  height: 6px;
+  background: var(--border);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.risk-bar-fill {
+  height: 100%;
+  transition: width 0.8s ease, background 0.6s;
+}
+
+.risk-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 0.75rem;
+}
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.stat-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 0.85rem;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3rem;
+}
+
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stat-unit {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-left: 2px;
+}
+
+/* Active fires list */
+.fire-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.fire-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.fire-item:hover { background: #1f1f1f; }
+
+.fire-icon { font-size: 1.1rem; }
+
+.fire-info { flex: 1; min-width: 0; }
+
+.fire-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fire-coords {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.fire-brightness {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--accent2);
+}
+
+/* Map */
+#map {
+  width: 100%;
+  height: 100%;
+  background: #0d0d0d;
+}
+
+.leaflet-tile-pane { filter: brightness(0.75) saturate(0.6) hue-rotate(10deg); }
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,10,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  gap: 1rem;
+  transition: opacity 0.4s;
+}
+
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.map-wrapper { position: relative; width: 100%; height: 100%; }
+
+/* Map legend */
+.map-legend {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1rem;
+  background: rgba(17,17,17,0.92);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  z-index: 500;
+  backdrop-filter: blur(8px);
+}
+
+.legend-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  margin-bottom: 0.3rem;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* No data state */
+.no-data {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 1rem;
+  font-style: italic;
+}
+
+/* Error message */
+.error-msg {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444;
+  font-size: 0.78rem;
+  padding: 0.6rem 0.8rem;
+  margin-top: 0.5rem;
+}
+
+/* Scrollbar for map attribution */
+.leaflet-control-attribution { font-size: 9px !important; }
+```
+
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">🔥</span>
+    <div>
+      <div class="logo-text">FireWatch</div>
+      <div class="logo-sub">Wildfire Risk Dashboard</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><span class="live-dot"></span> Live Data</div>
+    <div class="timestamp" id="timestamp">--</div>
+  </div>
+</header>
+
+<div class="search-bar">
+  <span class="search-label">Location →</span>
+  <input class="search-input" id="locationInput" type="text" placeholder="Enter city, region, or country..." />
+  <button class="search-btn" onclick="searchLocation()">Analyze</button>
+  <div class="preset-btns">
+    <button class="preset-btn" onclick="loadPreset('California, USA', 36.7, -119.4)">California</button>
+    <button class="preset-btn" onclick="loadPreset('Amazon, Brazil', -3.4, -65.0)">Amazon</button>
+    <button class="preset-btn" onclick="loadPreset('Australia', -25.3, 133.8)">Australia</button>
+    <button class="preset-btn" onclick="loadPreset('Mediterranean', 40.0, 15.0)">Mediterranean</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+
+```
+<!-- Risk Level -->
+<div class="panel">
+  <div class="panel-title">Current Fire Risk Level</div>
+  <div class="risk-display">
+    <div class="risk-level-text" id="riskText" style="color: var(--muted)">— — —</div>
+    <div class="risk-bar-wrap">
+      <div class="risk-bar-fill" id="riskBar" style="width:0%; background: var(--muted)"></div>
+    </div>
+    <div class="risk-desc" id="riskDesc">Search a location above to see fire risk analysis based on live weather data.</div>
+  </div>
+</div>
+
+<!-- Weather Stats -->
+<div class="panel">
+  <div class="panel-title">Weather Conditions</div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">🌡 Temperature</div>
+      <div class="stat-value" id="temp">--<span class="stat-unit">°C</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">💧 Humidity</div>
+      <div class="stat-value" id="humidity">--<span class="stat-unit">%</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">💨 Wind Speed</div>
+      <div class="stat-value" id="wind">--<span class="stat-unit">km/h</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🌧 Precipitation</div>
+      <div class="stat-value" id="precip">--<span class="stat-unit">mm</span></div>
+    </div>
+  </div>
+  <div id="weatherError"></div>
+</div>
+
+<!-- Active Fires -->
+<div class="panel" style="flex:1">
+  <div class="panel-title">Active Fire Detections Nearby <span id="fireCount" style="color:var(--accent)"></span></div>
+  <div class="fire-list" id="fireList">
+    <div class="no-data">Search a location to see nearby active fires from NASA satellite data.</div>
+  </div>
+</div>
+```
+
+  </div>
+
+  <div class="map-wrapper">
+    <div id="map"></div>
+    <div class="loading-overlay hidden" id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Fetching live data...</div>
+    </div>
+    <div class="map-legend">
+      <div class="legend-title">Fire Intensity</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ff4d00"></span> High brightness</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ffaa00"></span> Moderate</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ffdd88"></span> Low</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#4488ff; border-radius:2px"></span> Your location</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let map, currentLat, currentLon, currentName;
+let fireMarkers = [];
+
+// ─── Init Map ────────────────────────────────────────────
+map = L.map('map', { zoomControl: true, attributionControl: true }).setView([20, 0], 2);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap | NASA FIRMS | Open-Meteo',
+  maxZoom: 18
+}).addTo(map);
+
+// ─── Timestamp ───────────────────────────────────────────
+function updateTimestamp() {
+  const now = new Date();
+  document.getElementById('timestamp').textContent =
+    now.toUTCString().replace(' GMT', ' UTC');
+}
+updateTimestamp();
+setInterval(updateTimestamp, 1000);
+
+// ─── Search ──────────────────────────────────────────────
+async function searchLocation() {
+  const query = document.getElementById('locationInput').value.trim();
+  if (!query) return;
+
+  showLoading(true);
+
+  try {
+    const geoRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
+    );
+    const geoData = await geoRes.json();
+
+    if (!geoData.length) {
+      alert('Location not found. Try a different search term.');
+      showLoading(false);
+      return;
+    }
+
+    const { lat, lon, display_name } = geoData[0];
+    currentLat = parseFloat(lat);
+    currentLon = parseFloat(lon);
+    currentName = display_name.split(',').slice(0, 2).join(',');
+
+    map.setView([currentLat, currentLon], 7);
+
+    await Promise.all([fetchWeather(), fetchFires()]);
+
+  } catch (e) {
+    console.error(e);
+    alert('Error fetching data. Check your connection.');
+  }
+
+  showLoading(false);
+}
+
+async function loadPreset(name, lat, lon) {
+  document.getElementById('locationInput').value = name;
+  currentLat = lat; currentLon = lon; currentName = name;
+  map.setView([lat, lon], 6);
+  showLoading(true);
+  await Promise.all([fetchWeather(), fetchFires()]);
+  showLoading(false);
+}
+
+document.getElementById('locationInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchLocation();
+});
+
+// ─── Weather ─────────────────────────────────────────────
+async function fetchWeather() {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${currentLat}&longitude=${currentLon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&wind_speed_unit=kmh&timezone=auto`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const c = data.current;
+
+    const temp = c.temperature_2m;
+    const humidity = c.relative_humidity_2m;
+    const wind = c.wind_speed_10m;
+    const precip = c.precipitation;
+
+    document.getElementById('temp').innerHTML = `${temp.toFixed(1)}<span class="stat-unit">°C</span>`;
+    document.getElementById('humidity').innerHTML = `${humidity}<span class="stat-unit">%</span>`;
+    document.getElementById('wind').innerHTML = `${wind.toFixed(1)}<span class="stat-unit">km/h</span>`;
+    document.getElementById('precip').innerHTML = `${precip.toFixed(1)}<span class="stat-unit">mm</span>`;
+    document.getElementById('weatherError').innerHTML = '';
+
+    updateRiskLevel(temp, humidity, wind, precip);
+
+  } catch(e) {
+    document.getElementById('weatherError').innerHTML =
+      '<div class="error-msg">Could not load weather data.</div>';
+  }
+}
+
+// ─── Risk Algorithm ──────────────────────────────────────
+function updateRiskLevel(temp, humidity, wind, precip) {
+  // Fire Weather Index (simplified)
+  let score = 0;
+
+  // Temperature contribution (higher = worse)
+  if (temp > 38) score += 40;
+  else if (temp > 32) score += 30;
+  else if (temp > 26) score += 20;
+  else if (temp > 18) score += 10;
+  else score += 2;
+
+  // Humidity contribution (lower = worse)
+  if (humidity < 15) score += 35;
+  else if (humidity < 25) score += 25;
+  else if (humidity < 35) score += 15;
+  else if (humidity < 50) score += 8;
+  else score += 0;
+
+  // Wind contribution (higher = worse)
+  if (wind > 60) score += 20;
+  else if (wind > 40) score += 14;
+  else if (wind > 20) score += 8;
+  else score += 2;
+
+  // Precipitation mitigates (rain = good)
+  if (precip > 5) score -= 30;
+  else if (precip > 1) score -= 15;
+  else if (precip > 0.2) score -= 5;
+
+  score = Math.max(0, Math.min(100, score));
+
+  let level, color, desc;
+
+  if (score < 20) {
+    level = 'LOW'; color = 'var(--low)';
+    desc = 'Conditions are favorable. Low fire danger — cool temperatures, adequate humidity, and calm winds reduce ignition risk.';
+  } else if (score < 40) {
+    level = 'MODERATE'; color = 'var(--moderate)';
+    desc = 'Some fire weather present. Fires can start and spread under certain conditions. Outdoor burning should be done cautiously.';
+  } else if (score < 60) {
+    level = 'HIGH'; color = 'var(--high)';
+    desc = 'Dangerous fire weather conditions. Fires can start easily and spread rapidly. Avoid all open burning activities.';
+  } else if (score < 80) {
+    level = 'VERY HIGH'; color = 'var(--very-high)';
+    desc = 'Extreme caution required. Very high fire intensity is expected. Firefighting efforts may be difficult.';
+  } else {
+    level = 'EXTREME'; color = 'var(--extreme)';
+    desc = '⚠ Critical fire danger. Fires can explode in size. Evacuation plans should be reviewed. All burning prohibited.';
+  }
+
+  document.getElementById('riskText').textContent = level;
+  document.getElementById('riskText').style.color = color;
+  document.getElementById('riskBar').style.width = score + '%';
+  document.getElementById('riskBar').style.background = color;
+  document.getElementById('riskDesc').textContent = desc;
+}
+
+// ─── NASA FIRMS Fires ────────────────────────────────────
+async function fetchFires() {
+  // Clear old markers
+  fireMarkers.forEach(m => map.removeLayer(m));
+  fireMarkers = [];
+
+  // Use NASA FIRMS CSV endpoint (no API key for public access)
+  // We'll use a bounding box around the location
+  const delta = 8;
+  const minLat = currentLat - delta, maxLat = currentLat + delta;
+  const minLon = currentLon - delta, maxLon = currentLon + delta;
+
+  const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/c7f60ac5b6551882c0cd84edca7c1a25/VIIRS_SNPP_NRT/${minLon},${minLat},${maxLon},${maxLat}/2`;
+
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    const fires = parseCSV(text);
+
+    const fireList = document.getElementById('fireList');
+    document.getElementById('fireCount').textContent = fires.length ? `(${fires.length})` : '';
+
+    if (!fires.length) {
+      fireList.innerHTML = '<div class="no-data">No active fire detections in this region in the past 48 hours. 🌿</div>';
+      addLocationMarker();
+      return;
+    }
+
+    fireList.innerHTML = '';
+
+    fires.slice(0, 12).forEach((fire, i) => {
+      const lat = parseFloat(fire.latitude);
+      const lon = parseFloat(fire.longitude);
+      const brightness = parseFloat(fire.bright_ti4 || fire.brightness || 300);
+      const confidence = fire.confidence || 'n';
+      const date = fire.acq_date || '';
+
+      // Color by brightness
+      let dotColor = '#ffdd88';
+      if (brightness > 370) dotColor = '#ff4d00';
+      else if (brightness > 340) dotColor = '#ffaa00';
+
+      // Map marker
+      const circle = L.circleMarker([lat, lon], {
+        radius: brightness > 370 ? 10 : brightness > 340 ? 7 : 5,
+        fillColor: dotColor,
+        fillOpacity: 0.85,
+        color: 'rgba(255,100,0,0.3)',
+        weight: 1
+      }).addTo(map);
+
+      circle.bindPopup(`
+        <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#f0ece4;background:#111;padding:4px">
+          <strong style="color:#ff4d00">🔥 Active Fire</strong><br>
+          Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}<br>
+          Brightness: ${brightness.toFixed(0)} K<br>
+          Detected: ${date}
+        </div>
+      `);
+
+      fireMarkers.push(circle);
+
+      // Sidebar item
+      const dist = getDistKm(currentLat, currentLon, lat, lon);
+      const item = document.createElement('div');
+      item.className = 'fire-item';
+      item.innerHTML = `
+        <span class="fire-icon">🔥</span>
+        <div class="fire-info">
+          <div class="fire-name">Fire detection #${i+1} — ${dist.toFixed(0)} km away</div>
+          <div class="fire-coords">${lat.toFixed(3)}°, ${lon.toFixed(3)}° · ${date}</div>
+        </div>
+        <div class="fire-brightness">${brightness.toFixed(0)}K</div>
+      `;
+      item.onclick = () => {
+        map.setView([lat, lon], 10);
+        circle.openPopup();
+      };
+      fireList.appendChild(item);
+    });
+
+    if (fires.length > 12) {
+      const more = document.createElement('div');
+      more.className = 'no-data';
+      more.textContent = `+ ${fires.length - 12} more detections not shown`;
+      fireList.appendChild(more);
+    }
+
+  } catch(e) {
+    console.warn('Fire data fetch failed:', e);
+    document.getElementById('fireList').innerHTML =
+      '<div class="no-data">Fire data temporarily unavailable. NASA FIRMS may be rate-limiting. Try again shortly.</div>';
+  }
+
+  addLocationMarker();
+}
+
+function addLocationMarker() {
+  const marker = L.circleMarker([currentLat, currentLon], {
+    radius: 8,
+    fillColor: '#4488ff',
+    fillOpacity: 0.9,
+    color: 'white',
+    weight: 2
+  }).addTo(map);
+  marker.bindPopup(`<div style="font-family:'DM Sans',sans-serif;color:#f0ece4;background:#111;padding:4px"><strong>${currentName}</strong><br>Your selected location</div>`);
+  fireMarkers.push(marker);
+}
+
+// ─── Helpers ─────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',');
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = vals[i]?.trim() || '');
+    return obj;
+  }).filter(r => r.latitude && r.longitude);
+}
+
+function getDistKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+    Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function showLoading(show) {
+  document.getElementById('loadingOverlay').classList.toggle('hidden', !show);
+}
+
+// ─── Auto-load California on start ───────────────────────
+setTimeout(() => {
+  loadPreset('California, USA', 36.7, -119.4);
+}, 600);
+</script>
+
+</body>
+</html>
